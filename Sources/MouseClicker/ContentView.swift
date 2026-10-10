@@ -36,6 +36,12 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
 
+                Toggle("マウスボタンで開始/停止 (ゲーム中用)", isOn: $c.triggerEnabled)
+                Picker("トリガー", selection: $c.trigger) {
+                    ForEach(TriggerButton.allCases) { Text($0.label).tag($0) }
+                }
+                .disabled(!c.triggerEnabled)
+
                 Toggle("固定位置をクリック", isOn: $c.useFixedPoint)
                     .disabled(c.fixedPoint == nil)
                 HStack {
@@ -47,6 +53,9 @@ struct ContentView: View {
                 }
             }
             .disabled(c.running)
+
+            Text("※ 実行中も、トリガーのマウスボタンを押すと停止します")
+                .font(.caption).foregroundStyle(.secondary)
 
             Divider()
 

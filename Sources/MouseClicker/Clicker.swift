@@ -2,6 +2,20 @@ import AppKit
 import ApplicationServices
 import SwiftUI
 
+enum TriggerButton: Int, CaseIterable, Identifiable {
+    case middle = 2
+    case back = 3
+    case forward = 4
+    var id: Int { rawValue }
+    var label: String {
+        switch self {
+        case .middle: return "中ボタン (ホイール押し込み)"
+        case .back: return "サイドボタン (戻る)"
+        case .forward: return "サイドボタン (進む)"
+        }
+    }
+}
+
 enum ClickButton: String, CaseIterable, Identifiable {
     case left = "左"
     case right = "右"
@@ -18,6 +32,9 @@ final class Clicker: ObservableObject {
     @Published var button: ClickButton = .left
     @Published var useFixedPoint = false
     @Published var fixedPoint: CGPoint?
+    /// Mouse button that toggles start/stop from anywhere (e.g. inside a fullscreen game).
+    @Published var triggerEnabled = true
+    @Published var trigger: TriggerButton = .middle
 
     // State
     @Published private(set) var running = false
@@ -33,10 +50,25 @@ final class Clicker: ObservableObject {
         if let m = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] e in
             Task { @MainActor in self?.handleKey(e.keyCode) }
         }) { monitors.append(m) }
+        // Mouse trigger: press once to start, press again to stop. No delay, so it works in-game.
+        if let m = NSEvent.addGlobalMonitorForEvents(matching: .otherMouseDown, handler: { [weak self] e in
+            let n = e.buttonNumber
+            Task { @MainActor in self?.handleTrigger(n) }
+        }) { monitors.append(m) }
+        if let m = NSEvent.addLocalMonitorForEvents(matching: .otherMouseDown, handler: { [weak self] e in
+            let n = e.buttonNumber
+            Task { @MainActor in self?.handleTrigger(n) }
+            return e
+        }) { monitors.append(m) }
         if let m = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] e in
             Task { @MainActor in self?.handleKey(e.keyCode) }
             return e
         }) { monitors.append(m) }
+    }
+
+    private func handleTrigger(_ buttonNumber: Int) {
+        guard triggerEnabled, buttonNumber == trigger.rawValue else { return }
+        if running { stop() } else { start(skipDelay: true) }
     }
 
     private func handleKey(_ code: UInt16) {
@@ -54,7 +86,7 @@ final class Clicker: ObservableObject {
 
     func toggle() { running ? stop() : start() }
 
-    func start() {
+    func start(skipDelay: Bool = false) {
         trusted = AXIsProcessTrusted()
         guard trusted else {
             requestPermission()
@@ -66,7 +98,7 @@ final class Clicker: ObservableObject {
         done = 0
         let total = infinite ? Int.max : max(count, 1)
         let interval = UInt64(max(intervalMs, 1)) * 1_000_000
-        let delay = max(startDelay, 0)
+        let delay = skipDelay ? 0 : max(startDelay, 0)
 
         task = Task { [weak self] in
             guard let self else { return }
@@ -75,7 +107,7 @@ final class Clicker: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 if Task.isCancelled { return }
             }
-            self.status = "実行中 (F6 / Esc で停止)"
+            self.status = "実行中 (トリガー / F6 / Esc で停止)"
             while self.done < total && !Task.isCancelled {
                 self.click()
                 self.done += 1
