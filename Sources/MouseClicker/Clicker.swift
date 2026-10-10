@@ -68,7 +68,7 @@ final class Clicker: ObservableObject {
 
     private func handleTrigger(_ buttonNumber: Int) {
         guard triggerEnabled, buttonNumber == trigger.rawValue else { return }
-        if running { stop() } else { start(skipDelay: true) }
+        if running { stop() } else { start(skipDelay: true, promptForPermission: false) }
     }
 
     private func handleKey(_ code: UInt16) {
@@ -86,11 +86,11 @@ final class Clicker: ObservableObject {
 
     func toggle() { running ? stop() : start() }
 
-    func start(skipDelay: Bool = false) {
+    func start(skipDelay: Bool = false, promptForPermission: Bool = true) {
         trusted = AXIsProcessTrusted()
         guard trusted else {
-            requestPermission()
-            status = "アクセシビリティ権限が必要です"
+            if promptForPermission { requestPermission() }
+            status = "アクセシビリティ権限が必要です (ウィンドウの「許可する」から設定)"
             return
         }
         guard !running else { return }
